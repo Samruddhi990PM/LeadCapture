@@ -1,25 +1,53 @@
 import json
 import os
+import urllib.request
 from http.server import BaseHTTPRequestHandler
-import psycopg2
+from datetime import datetime, timezone
+
+BLOB_BASE = "https://blob.vercel-storage.com"
+LEADS_KEY = "strive-leads/leads.json"
 
 
-def get_conn():
-    return psycopg2.connect(os.environ["POSTGRES_URL"])
+def _token():
+    t = os.environ.get("BLOB_READ_WRITE_TOKEN", "")
+    if not t:
+        raise RuntimeError("BLOB_READ_WRITE_TOKEN not set")
+    return t
 
 
-def init_db(cur):
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS leads (
-            id SERIAL PRIMARY KEY,
-            company_name TEXT,
-            contact_number TEXT,
-            email TEXT,
-            number_of_units INTEGER,
-            comments TEXT,
-            created_at TIMESTAMP DEFAULT NOW()
-        )
-    """)
+def _fetch_leads():
+    """Download current leads list from Blob, return [] if not found."""
+    url = f"{BLOB_BASE}?prefix={LEADS_KEY}&limit=1"
+    req = urllib.request.Request(url, headers={"authorization": f"Bearer {_token()}"})
+    try:
+        with urllib.request.urlopen(req) as r:
+            data = json.loads(r.read())
+        blobs = data.get("blobs", [])
+        if not blobs:
+            return []
+        req2 = urllib.request.Request(blobs[0]["url"], headers={"authorization": f"Bearer {_token()}"})
+        with urllib.request.urlopen(req2) as r2:
+            return json.loads(r2.read())
+    except Exception:
+        return []
+
+
+def _save_leads(leads):
+    """Upload full leads list back to Blob (overwrites)."""
+    payload = json.dumps(leads, ensure_ascii=False).encode()
+    req = urllib.request.Request(
+        f"{BLOB_BASE}/{LEADS_KEY}",
+        data=payload,
+        headers={
+            "authorization": f"Bearer {_token()}",
+            "content-type": "application/json",
+            "x-content-type": "application/json",
+            "x-add-random-suffix": "0",
+        },
+        method="PUT",
+    )
+    with urllib.request.urlopen(req) as r:
+        return json.loads(r.read())
 
 
 class handler(BaseHTTPRequestHandler):
@@ -27,33 +55,21 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length)
-            data = json.loads(body)
-
-            conn = get_conn()
-            cur = conn.cursor()
-            init_db(cur)
-
-            cur.execute(
-                """INSERT INTO leads
-                   (company_name, contact_number, email, number_of_units, comments)
-                   VALUES (%s, %s, %s, %s, %s)
-                   RETURNING id""",
-                (
-                    data.get("companyName"),
-                    data.get("contactNumber"),
-                    data.get("email"),
-                    int(data.get("numberOfUnits") or 0),
-                    data.get("comments"),
-                ),
-            )
-            new_id = cur.fetchone()[0]
-            conn.commit()
-            cur.close()
-            conn.close()
-
+            body = json.loads(self.rfile.read(length))
+            leads = _fetch_leads()
+            new_id = (leads[-1]["id"] + 1) if leads else 1
+            record = {
+                "id": new_id,
+                "company_name":    body.get("companyName", ""),
+                "contact_number":  body.get("contactNumber", ""),
+                "email":           body.get("email", ""),
+                "number_of_units": body.get("numberOfUnits", ""),
+                "comments":        body.get("comments", ""),
+                "created_at":      datetime.now(timezone.utc).isoformat(),
+            }
+            leads.append(record)
+            _save_leads(leads)
             self._respond(200, {"success": True, "id": new_id})
-
         except Exception as e:
             self._respond(500, {"error": str(e)})
 
@@ -70,5 +86,5 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
-    def log_message(self, format, *args):
-        pass  # suppress default logging
+    def log_message(self, *args):
+        pass
