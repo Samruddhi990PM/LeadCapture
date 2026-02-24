@@ -52,8 +52,7 @@ def _save_leads(leads):
     headers.update({
         "content-type": "application/octet-stream",
         "x-content-type": "application/json",
-        "x-add-random-suffix": "0",
-        "x-cache-control": "private",   # ← required for private stores
+        "x-add-random-suffix": "0"
     })
     req = urllib.request.Request(
         f"{BLOB_API}/{LEADS_PATH}",
