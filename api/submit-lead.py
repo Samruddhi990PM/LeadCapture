@@ -16,7 +16,7 @@ def _token():
     return t
 
 
-def _base_headers():
+def _auth_headers():
     return {
         "authorization": f"Bearer {_token()}",
         "x-api-version": "7",
@@ -25,10 +25,10 @@ def _base_headers():
 
 
 def _fetch_leads():
-    # Step 1: list blobs to get the file's URL
+    # List blobs to find the file
     req = urllib.request.Request(
         f"{BLOB_API}?prefix={LEADS_PATH}&limit=1",
-        headers=_base_headers()
+        headers=_auth_headers()
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
@@ -36,15 +36,10 @@ def _fetch_leads():
         blobs = data.get("blobs", [])
         if not blobs:
             return []
-
-        # Step 2: fetch file content — private store requires auth on download too
-        req2 = urllib.request.Request(
-            blobs[0]["url"],
-            headers=_base_headers()
-        )
+        # Private store download requires auth token
+        req2 = urllib.request.Request(blobs[0]["url"], headers=_auth_headers())
         with urllib.request.urlopen(req2, timeout=10) as r2:
             return json.loads(r2.read().decode("utf-8"))
-
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return []
@@ -53,11 +48,12 @@ def _fetch_leads():
 
 def _save_leads(leads):
     payload = json.dumps(leads, ensure_ascii=False, indent=2).encode("utf-8")
-    headers = _base_headers()
+    headers = _auth_headers()
     headers.update({
         "content-type": "application/octet-stream",
         "x-content-type": "application/json",
         "x-add-random-suffix": "0",
+        "x-cache-control": "private",   # ← required for private stores
     })
     req = urllib.request.Request(
         f"{BLOB_API}/{LEADS_PATH}",

@@ -15,7 +15,7 @@ def _token():
     return t
 
 
-def _base_headers():
+def _auth_headers():
     return {
         "authorization": f"Bearer {_token()}",
         "x-api-version": "7",
@@ -26,7 +26,7 @@ def _base_headers():
 def _fetch_leads():
     req = urllib.request.Request(
         f"{BLOB_API}?prefix={LEADS_PATH}&limit=1",
-        headers=_base_headers()
+        headers=_auth_headers()
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
@@ -34,11 +34,7 @@ def _fetch_leads():
         blobs = data.get("blobs", [])
         if not blobs:
             return []
-        # Private store — auth required on download
-        req2 = urllib.request.Request(
-            blobs[0]["url"],
-            headers=_base_headers()
-        )
+        req2 = urllib.request.Request(blobs[0]["url"], headers=_auth_headers())
         with urllib.request.urlopen(req2, timeout=10) as r2:
             return json.loads(r2.read().decode("utf-8"))
     except urllib.error.HTTPError as e:

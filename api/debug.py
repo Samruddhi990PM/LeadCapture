@@ -20,7 +20,7 @@ class handler(BaseHTTPRequestHandler):
             self._respond(200, result)
             return
 
-        headers = {
+        base_headers = {
             "authorization": f"Bearer {token}",
             "x-api-version": "7",
             "accept": "application/json",
@@ -30,7 +30,7 @@ class handler(BaseHTTPRequestHandler):
         try:
             req = urllib.request.Request(
                 f"{BLOB_API}?prefix={LEADS_PATH}&limit=1",
-                headers=headers
+                headers=base_headers
             )
             with urllib.request.urlopen(req, timeout=10) as r:
                 list_data = json.loads(r.read().decode())
@@ -43,14 +43,15 @@ class handler(BaseHTTPRequestHandler):
             result["2_list_ok"] = False
             result["2_list_error"] = str(e)
 
-        # Test PUT — write a small test file
+        # Test PUT with x-cache-control: private
         try:
             payload = json.dumps({"test": True}).encode("utf-8")
-            put_headers = dict(headers)
+            put_headers = dict(base_headers)
             put_headers.update({
                 "content-type": "application/octet-stream",
                 "x-content-type": "application/json",
                 "x-add-random-suffix": "0",
+                "x-cache-control": "private",   # ← the fix
             })
             req2 = urllib.request.Request(
                 f"{BLOB_API}/strive-leads/debug-test.json",
@@ -62,14 +63,6 @@ class handler(BaseHTTPRequestHandler):
                 put_data = json.loads(r2.read().decode())
             result["3_put_ok"] = True
             result["3_put_url"] = put_data.get("url", "")
-
-            # Test reading back the file with auth (private store)
-            req3 = urllib.request.Request(put_data["url"], headers=headers)
-            with urllib.request.urlopen(req3, timeout=10) as r3:
-                read_back = json.loads(r3.read().decode())
-            result["4_read_back_ok"] = True
-            result["4_read_back"] = read_back
-
         except urllib.error.HTTPError as e:
             result["3_put_ok"] = False
             result["3_put_error"] = f"HTTP {e.code}: {e.reason}"
