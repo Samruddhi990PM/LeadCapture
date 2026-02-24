@@ -5,7 +5,6 @@ import urllib.error
 from http.server import BaseHTTPRequestHandler
 from datetime import datetime, timezone
 
-# Vercel Blob REST API base
 BLOB_API = "https://blob.vercel-storage.com"
 LEADS_PATHNAME = "strive-leads/leads.json"
 
@@ -18,69 +17,48 @@ def _token():
 
 
 def _fetch_leads():
-    """
-    Step 1: List blobs to find the file URL.
-    Step 2: Fetch the file content from its public CDN URL.
-    Returns [] if file doesn't exist yet.
-    """
+    """List blobs, then fetch the JSON from the CDN URL."""
     token = _token()
-
-    # Vercel Blob list endpoint
     list_url = f"{BLOB_API}?prefix={LEADS_PATHNAME}&limit=1"
     req = urllib.request.Request(
         list_url,
-        headers={
-            "authorization": f"Bearer {token}",
-            "accept": "application/json",
-        }
+        headers={"authorization": f"Bearer {token}", "accept": "application/json"}
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read().decode("utf-8"))
-
         blobs = data.get("blobs", [])
         if not blobs:
             return []
-
-        # Fetch the actual JSON content from the CDN URL (public, no auth needed)
-        cdn_url = blobs[0]["url"]
-        req2 = urllib.request.Request(cdn_url)
+        # CDN URL is public — no auth needed
+        req2 = urllib.request.Request(blobs[0]["url"])
         with urllib.request.urlopen(req2, timeout=10) as r2:
             return json.loads(r2.read().decode("utf-8"))
-
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return []
-        body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"List failed HTTP {e.code}: {body}")
-    except Exception as e:
-        raise RuntimeError(f"Fetch failed: {e}")
+        raise RuntimeError(f"Fetch error {e.code}: {e.read().decode()}")
 
 
 def _save_leads(leads):
     """
-    Vercel Blob upload via PUT to:
-      PUT https://blob.vercel-storage.com/{pathname}
-    Required headers:
-      authorization: Bearer <token>
-      x-content-type: application/json
-      x-add-random-suffix: 0        <- keeps exact pathname, no hash suffix
-      content-type: application/octet-stream  <- body is raw bytes
+    Vercel Blob upload — correct method:
+    POST https://blob.vercel-storage.com/{pathname}
+    with the raw bytes as body and the token + content-type as headers.
+    The x-add-random-suffix: 0 header keeps the exact pathname.
     """
     token = _token()
     payload = json.dumps(leads, ensure_ascii=False, indent=2).encode("utf-8")
 
-    put_url = f"{BLOB_API}/{LEADS_PATHNAME}"
+    # Correct: POST (not PUT) to the blob API
     req = urllib.request.Request(
-        put_url,
+        f"{BLOB_API}/{LEADS_PATHNAME}",
         data=payload,
-        method="PUT",
+        method="POST",
         headers={
             "authorization": f"Bearer {token}",
-            "x-content-type": "application/json",
+            "content-type": "application/json",
             "x-add-random-suffix": "0",
-            "content-type": "application/octet-stream",
-            "content-length": str(len(payload)),
             "accept": "application/json",
         }
     )
@@ -89,7 +67,7 @@ def _save_leads(leads):
             return json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"PUT failed HTTP {e.code}: {body}")
+        raise RuntimeError(f"Blob upload error {e.code}: {body}")
 
 
 class handler(BaseHTTPRequestHandler):
@@ -113,11 +91,7 @@ class handler(BaseHTTPRequestHandler):
             }
             leads.append(record)
             result = _save_leads(leads)
-            self._respond(200, {
-                "success": True,
-                "id": new_id,
-                "blob_url": result.get("url", "")
-            })
+            self._respond(200, {"success": True, "id": new_id, "url": result.get("url", "")})
 
         except Exception as e:
             self._respond(500, {"error": str(e)})

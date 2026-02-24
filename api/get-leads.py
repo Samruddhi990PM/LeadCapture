@@ -17,35 +17,24 @@ def _token():
 
 def _fetch_leads():
     token = _token()
-
     list_url = f"{BLOB_API}?prefix={LEADS_PATHNAME}&limit=1"
     req = urllib.request.Request(
         list_url,
-        headers={
-            "authorization": f"Bearer {token}",
-            "accept": "application/json",
-        }
+        headers={"authorization": f"Bearer {token}", "accept": "application/json"}
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read().decode("utf-8"))
-
         blobs = data.get("blobs", [])
         if not blobs:
             return []
-
-        cdn_url = blobs[0]["url"]
-        req2 = urllib.request.Request(cdn_url)
+        req2 = urllib.request.Request(blobs[0]["url"])
         with urllib.request.urlopen(req2, timeout=10) as r2:
             return json.loads(r2.read().decode("utf-8"))
-
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return []
-        body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"List failed HTTP {e.code}: {body}")
-    except Exception as e:
-        raise RuntimeError(f"Fetch failed: {e}")
+        raise RuntimeError(f"Fetch error {e.code}: {e.read().decode()}")
 
 
 class handler(BaseHTTPRequestHandler):
