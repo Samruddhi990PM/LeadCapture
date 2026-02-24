@@ -2,6 +2,4 @@
 name = "strive-leads"
 version = "1.0.0"
 requires-python = ">=3.9"
-dependencies = [
-  "vercel_blob"
-]
+dependencies = []

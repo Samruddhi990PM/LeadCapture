@@ -1,10 +1,11 @@
 import json
 import os
+import urllib.request
+import urllib.error
 from http.server import BaseHTTPRequestHandler
 
-import vercel_blob
-
-LEADS_PATHNAME = "strive-leads/leads.json"
+BLOB_API = "https://blob.vercel-storage.com"
+LEADS_PATH = "strive-leads/leads.json"
 
 
 class handler(BaseHTTPRequestHandler):
@@ -19,28 +20,56 @@ class handler(BaseHTTPRequestHandler):
             self._respond(200, result)
             return
 
+        headers = {
+            "authorization": f"Bearer {token}",
+            "x-api-version": "7",
+            "accept": "application/json",
+        }
+
         # Test LIST
         try:
-            list_result = vercel_blob.list({"prefix": LEADS_PATHNAME, "limit": "1"})
+            req = urllib.request.Request(
+                f"{BLOB_API}?prefix={LEADS_PATH}&limit=1",
+                headers=headers
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                list_data = json.loads(r.read().decode())
             result["2_list_ok"] = True
-            result["2_blobs_found"] = len(list_result.get("blobs", []))
+            result["2_blobs_found"] = len(list_data.get("blobs", []))
+        except urllib.error.HTTPError as e:
+            result["2_list_ok"] = False
+            result["2_list_error"] = f"HTTP {e.code}"
+            result["2_list_body"] = e.read().decode()
         except Exception as e:
             result["2_list_ok"] = False
             result["2_list_error"] = str(e)
 
         # Test PUT upload
         try:
-            test_payload = json.dumps({"test": True}).encode("utf-8")
-            put_result = vercel_blob.put(
-                "strive-leads/debug-test.json",
-                test_payload,
-                {"addRandomSuffix": "false", "contentType": "application/json"},
+            payload = json.dumps({"test": True}).encode("utf-8")
+            put_headers = dict(headers)
+            put_headers.update({
+                "content-type": "application/octet-stream",
+                "x-content-type": "application/json",
+                "x-add-random-suffix": "0",
+            })
+            req2 = urllib.request.Request(
+                f"{BLOB_API}/strive-leads/debug-test.json",
+                data=payload,
+                method="PUT",
+                headers=put_headers
             )
-            result["3_upload_ok"] = True
-            result["3_upload_url"] = put_result.get("url", "")
+            with urllib.request.urlopen(req2, timeout=10) as r2:
+                put_data = json.loads(r2.read().decode())
+            result["3_put_ok"] = True
+            result["3_put_url"] = put_data.get("url", "")
+        except urllib.error.HTTPError as e:
+            result["3_put_ok"] = False
+            result["3_put_error"] = f"HTTP {e.code}: {e.reason}"
+            result["3_put_body"] = e.read().decode()
         except Exception as e:
-            result["3_upload_ok"] = False
-            result["3_upload_error"] = str(e)
+            result["3_put_ok"] = False
+            result["3_put_error"] = str(e)
 
         self._respond(200, result)
 
