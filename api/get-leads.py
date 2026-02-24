@@ -1,40 +1,18 @@
 import json
-import os
-import urllib.request
-import urllib.error
 from http.server import BaseHTTPRequestHandler
 
-BLOB_API = "https://blob.vercel-storage.com"
+import vercel_blob
+
 LEADS_PATHNAME = "strive-leads/leads.json"
 
 
-def _token():
-    t = os.environ.get("BLOB_READ_WRITE_TOKEN", "")
-    if not t:
-        raise RuntimeError("BLOB_READ_WRITE_TOKEN not set")
-    return t
-
-
 def _fetch_leads():
-    token = _token()
-    list_url = f"{BLOB_API}?prefix={LEADS_PATHNAME}&limit=1"
-    req = urllib.request.Request(
-        list_url,
-        headers={"authorization": f"Bearer {token}", "accept": "application/json"}
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read().decode("utf-8"))
-        blobs = data.get("blobs", [])
-        if not blobs:
-            return []
-        req2 = urllib.request.Request(blobs[0]["url"])
-        with urllib.request.urlopen(req2, timeout=10) as r2:
-            return json.loads(r2.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return []
-        raise RuntimeError(f"Fetch error {e.code}: {e.read().decode()}")
+    result = vercel_blob.list({"prefix": LEADS_PATHNAME, "limit": "1"})
+    blobs = result.get("blobs", [])
+    if not blobs:
+        return []
+    data = vercel_blob.download_file_content(blobs[0]["url"])
+    return json.loads(data.decode("utf-8"))
 
 
 class handler(BaseHTTPRequestHandler):

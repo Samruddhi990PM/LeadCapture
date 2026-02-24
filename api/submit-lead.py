@@ -1,73 +1,33 @@
 import json
 import os
-import urllib.request
-import urllib.error
 from http.server import BaseHTTPRequestHandler
 from datetime import datetime, timezone
 
-BLOB_API = "https://blob.vercel-storage.com"
+import vercel_blob
+
+
 LEADS_PATHNAME = "strive-leads/leads.json"
 
 
-def _token():
-    t = os.environ.get("BLOB_READ_WRITE_TOKEN", "")
-    if not t:
-        raise RuntimeError("BLOB_READ_WRITE_TOKEN not set")
-    return t
-
-
 def _fetch_leads():
-    """List blobs, then fetch the JSON from the CDN URL."""
-    token = _token()
-    list_url = f"{BLOB_API}?prefix={LEADS_PATHNAME}&limit=1"
-    req = urllib.request.Request(
-        list_url,
-        headers={"authorization": f"Bearer {token}", "accept": "application/json"}
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read().decode("utf-8"))
-        blobs = data.get("blobs", [])
-        if not blobs:
-            return []
-        # CDN URL is public — no auth needed
-        req2 = urllib.request.Request(blobs[0]["url"])
-        with urllib.request.urlopen(req2, timeout=10) as r2:
-            return json.loads(r2.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return []
-        raise RuntimeError(f"Fetch error {e.code}: {e.read().decode()}")
+    """List blobs, find the leads file, return its parsed JSON."""
+    result = vercel_blob.list({"prefix": LEADS_PATHNAME, "limit": "1"})
+    blobs = result.get("blobs", [])
+    if not blobs:
+        return []
+    # Download raw bytes from the CDN URL
+    data = vercel_blob.download_file_content(blobs[0]["url"])
+    return json.loads(data.decode("utf-8"))
 
 
 def _save_leads(leads):
-    """
-    Vercel Blob upload — correct method:
-    POST https://blob.vercel-storage.com/{pathname}
-    with the raw bytes as body and the token + content-type as headers.
-    The x-add-random-suffix: 0 header keeps the exact pathname.
-    """
-    token = _token()
+    """Upload (overwrite) the leads JSON file to Vercel Blob."""
     payload = json.dumps(leads, ensure_ascii=False, indent=2).encode("utf-8")
-
-    # Correct: POST (not PUT) to the blob API
-    req = urllib.request.Request(
-        f"{BLOB_API}/{LEADS_PATHNAME}",
-        data=payload,
-        method="POST",
-        headers={
-            "authorization": f"Bearer {token}",
-            "content-type": "application/json",
-            "x-add-random-suffix": "0",
-            "accept": "application/json",
-        }
+    return vercel_blob.put(
+        LEADS_PATHNAME,
+        payload,
+        {"addRandomSuffix": "false", "contentType": "application/json"},
     )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            return json.loads(r.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Blob upload error {e.code}: {body}")
 
 
 class handler(BaseHTTPRequestHandler):
