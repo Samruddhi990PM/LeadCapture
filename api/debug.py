@@ -38,13 +38,12 @@ class handler(BaseHTTPRequestHandler):
             result["2_blobs_found"] = len(list_data.get("blobs", []))
         except urllib.error.HTTPError as e:
             result["2_list_ok"] = False
-            result["2_list_error"] = f"HTTP {e.code}"
-            result["2_list_body"] = e.read().decode()
+            result["2_list_error"] = f"HTTP {e.code}: {e.read().decode()}"
         except Exception as e:
             result["2_list_ok"] = False
             result["2_list_error"] = str(e)
 
-        # Test PUT upload
+        # Test PUT — write a small test file
         try:
             payload = json.dumps({"test": True}).encode("utf-8")
             put_headers = dict(headers)
@@ -63,6 +62,14 @@ class handler(BaseHTTPRequestHandler):
                 put_data = json.loads(r2.read().decode())
             result["3_put_ok"] = True
             result["3_put_url"] = put_data.get("url", "")
+
+            # Test reading back the file with auth (private store)
+            req3 = urllib.request.Request(put_data["url"], headers=headers)
+            with urllib.request.urlopen(req3, timeout=10) as r3:
+                read_back = json.loads(r3.read().decode())
+            result["4_read_back_ok"] = True
+            result["4_read_back"] = read_back
+
         except urllib.error.HTTPError as e:
             result["3_put_ok"] = False
             result["3_put_error"] = f"HTTP {e.code}: {e.reason}"
