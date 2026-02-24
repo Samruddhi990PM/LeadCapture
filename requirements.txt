@@ -1,2 +1,0 @@
-# No external dependencies — uses Python stdlib only (urllib, json, os)
-# Vercel Blob is accessed via direct HTTP calls
