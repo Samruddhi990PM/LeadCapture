@@ -50,12 +50,11 @@ def _save_leads(leads):
     payload = json.dumps(leads, ensure_ascii=False, indent=2).encode("utf-8")
     headers = _auth_headers()
     headers.update({
-        "content-type": "application/octet-stream",
         "x-content-type": "application/json",
         "x-add-random-suffix": "0"
     })
     req = urllib.request.Request(
-        f"{BLOB_API}/{LEADS_PATH}",
+        f"{BLOB_API}/upload?pathname={LEADS_PATH}",
         data=payload,
         method="PUT",
         headers=headers
