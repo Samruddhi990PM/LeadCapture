@@ -463,18 +463,29 @@
       err.classList.remove('show');
       btn.disabled = true; btn.textContent = 'Submitting…';
 
+      let savedToBlob = false;
       try {
         const res = await fetch('/api/submit-lead', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(v)
         });
-        if (!res.ok) throw new Error();
-      } catch {
-        // localStorage fallback
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        savedToBlob = true;
+      } catch (e) {
+        // Always save to localStorage as backup
         const leads = JSON.parse(localStorage.getItem('strive_leads') || '[]');
         leads.push({...v, id: Date.now(), created_at: new Date().toISOString()});
         localStorage.setItem('strive_leads', JSON.stringify(leads));
+        // Show error instead of hiding it — helps diagnose Blob issues
+        if (!savedToBlob) {
+          btn.disabled = false;
+          btn.textContent = 'Claim My Exclusive Offer →';
+          err.textContent = '⚠ Server error: ' + e.message + ' (data saved locally)';
+          err.classList.add('show');
+          return;
+        }
       }
 
       document.getElementById('formSection').style.display = 'none';
