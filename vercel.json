@@ -2,9 +2,16 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/*.py",
-      "use": "@vercel/python",
-      "config": { "maxLambdaSize": "15mb" }
+      "src": "api/submit-lead.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/get-leads.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/debug.py",
+      "use": "@vercel/python"
     },
     {
       "src": "public/**",
@@ -14,6 +21,7 @@
   "routes": [
     { "src": "/api/submit-lead", "dest": "/api/submit-lead.py" },
     { "src": "/api/get-leads",   "dest": "/api/get-leads.py"   },
+    { "src": "/api/debug",       "dest": "/api/debug.py"       },
     { "src": "/dashboard",       "dest": "/public/dashboard.html" },
     { "src": "/dashboard.html",  "dest": "/public/dashboard.html" },
     { "src": "/(.*)",            "dest": "/public/$1" }
