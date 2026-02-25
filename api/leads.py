@@ -1,40 +1,61 @@
 """
-Single API file handling:
+Single API file:
   POST /api/leads  — save a new lead
   GET  /api/leads  — return all leads
 
-Uses vercel_blob package (pip install vercel_blob).
-Confirmed working signature: vercel_blob.put(pathname, body, options_dict)
+Requires a PUBLIC Vercel Blob store (public is the default when creating).
+The BLOB_READ_WRITE_TOKEN is still required to write — only reads are public.
 """
 import json
 import os
+import urllib.request
+import urllib.error
 from http.server import BaseHTTPRequestHandler
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
-import vercel_blob
-
+BLOB_API = "https://blob.vercel-storage.com"
 LEADS_PATH = "leads/leads.json"
 
 
+def _token():
+    t = os.environ.get("BLOB_READ_WRITE_TOKEN", "")
+    if not t:
+        raise RuntimeError("BLOB_READ_WRITE_TOKEN not set — connect Blob store in Vercel dashboard")
+    return t
+
+
 def _read_leads() -> list:
-    try:
-        result = vercel_blob.list({"prefix": LEADS_PATH, "limit": "1"})
-        blobs = result.get("blobs", [])
-        if not blobs:
-            return []
-        data = vercel_blob.get(blobs[0]["url"])
-        return json.loads(data)
-    except Exception:
+    # Step 1: find the file
+    req = urllib.request.Request(
+        f"{BLOB_API}?prefix={LEADS_PATH}&limit=1",
+        headers={"authorization": f"Bearer {_token()}", "x-api-version": "7"}
+    )
+    with urllib.request.urlopen(req, timeout=10) as r:
+        blobs = json.loads(r.read()).get("blobs", [])
+    if not blobs:
         return []
+    # Step 2: fetch file from public CDN URL (no auth needed for public store)
+    with urllib.request.urlopen(blobs[0]["url"], timeout=10) as r:
+        return json.loads(r.read())
 
 
 def _write_leads(leads: list):
     payload = json.dumps(leads, ensure_ascii=False, indent=2).encode("utf-8")
-    vercel_blob.put(LEADS_PATH, payload, {
-        "addRandomSuffix": "false",
-        "contentType": "application/json",
-    })
+    req = urllib.request.Request(
+        f"{BLOB_API}/{LEADS_PATH}",
+        data=payload,
+        method="PUT",
+        headers={
+            "authorization": f"Bearer {_token()}",
+            "x-api-version": "7",
+            "x-content-type": "application/json",
+            "x-add-random-suffix": "0",
+            "content-type": "application/octet-stream",
+        }
+    )
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
 
 
 class handler(BaseHTTPRequestHandler):
