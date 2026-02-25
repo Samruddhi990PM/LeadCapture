@@ -134,7 +134,7 @@
   async function loadLeads() {
     let blobError = '';
     try {
-      const res = await fetch('/api/get-leads');
+      const res = await fetch('/api/leads');
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
       allLeads = data.leads || [];

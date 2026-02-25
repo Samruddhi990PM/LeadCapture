@@ -1,29 +1,13 @@
 {
   "version": 2,
   "builds": [
-    {
-      "src": "api/submit-lead.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "api/get-leads.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "api/debug.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "public/**",
-      "use": "@vercel/static"
-    }
+    { "src": "api/leads.py", "use": "@vercel/python" },
+    { "src": "public/**",    "use": "@vercel/static" }
   ],
   "routes": [
-    { "src": "/api/submit-lead", "dest": "/api/submit-lead.py" },
-    { "src": "/api/get-leads",   "dest": "/api/get-leads.py"   },
-    { "src": "/api/debug",       "dest": "/api/debug.py"       },
-    { "src": "/dashboard",       "dest": "/public/dashboard.html" },
-    { "src": "/dashboard.html",  "dest": "/public/dashboard.html" },
-    { "src": "/(.*)",            "dest": "/public/$1" }
+    { "src": "/api/leads",      "dest": "/api/leads.py" },
+    { "src": "/dashboard",      "dest": "/public/dashboard.html" },
+    { "src": "/dashboard.html", "dest": "/public/dashboard.html" },
+    { "src": "/(.*)",           "dest": "/public/$1" }
   ]
 }
