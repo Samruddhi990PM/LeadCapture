@@ -32,6 +32,7 @@ def _read_leads() -> list:
 def _write_leads(leads: list):
     payload = json.dumps(leads, ensure_ascii=False, indent=2).encode("utf-8")
     vercel_blob.put(LEADS_PATH, payload, {
+        "access": "private",
         "addRandomSuffix": False,
         "contentType": "application/json",
     })
