@@ -1,10 +1,10 @@
 """
-Single API file handling two routes:
+Single API file handling:
   POST /api/leads  — save a new lead
   GET  /api/leads  — return all leads
 
-Uses the official `vercel` Python SDK (pip install vercel) which correctly
-handles both public and private Blob stores without raw HTTP header guesswork.
+Uses vercel_blob package (pip install vercel_blob).
+Confirmed working signature: vercel_blob.put(pathname, body, options_dict)
 """
 import json
 import os
@@ -12,27 +12,26 @@ from http.server import BaseHTTPRequestHandler
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
-from vercel import blob
+import vercel_blob
 
 LEADS_PATH = "leads/leads.json"
 
 
 def _read_leads() -> list:
     try:
-        result = blob.list({"prefix": LEADS_PATH, "limit": 1})
+        result = vercel_blob.list({"prefix": LEADS_PATH, "limit": 1})
         blobs = result.get("blobs", [])
         if not blobs:
             return []
-        data = blob.download_file_content(blobs[0]["url"])
+        data = vercel_blob.get(blobs[0]["url"])
         return json.loads(data)
     except Exception:
         return []
 
 
-def _write_leads(leads: list) -> dict:
+def _write_leads(leads: list):
     payload = json.dumps(leads, ensure_ascii=False, indent=2).encode("utf-8")
-    return blob.put(LEADS_PATH, payload, {
-        "access": "private",
+    vercel_blob.put(LEADS_PATH, payload, {
         "addRandomSuffix": False,
         "contentType": "application/json",
     })
@@ -58,7 +57,7 @@ class handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length))
             leads = _read_leads()
             record = {
-                "id": (leads[-1]["id"] + 1) if leads else 1,
+                "id":              (leads[-1]["id"] + 1) if leads else 1,
                 "company_name":    body.get("companyName", "").strip(),
                 "contact_number":  body.get("contactNumber", "").strip(),
                 "email":           body.get("email", "").strip(),
